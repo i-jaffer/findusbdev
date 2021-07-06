@@ -87,7 +87,7 @@ out:
  * @param pathname:路径
  * @return 0:success -1:failed
  */
-int scan_usbdevice(char *pathname)
+int scan_usbdevice(char *pathname, char *name)
 {
         int fd = 0;
         int ret = 0;
@@ -150,15 +150,18 @@ int scan_usbdevice(char *pathname)
         }else {
                 wait(NULL);
                 printf("finish:%s\n", p);
+                strcpy(name, p);
         }
+        munmap(p, 10);
 
         ret = 0;
 out:
         return ret;
 }
 
-int scan_dir(char *dir)
+int scan_dir(char *dir, char *name)
 {
+        int ret = -1;
         DIR *p_dir;
         struct dirent *entry;
         struct stat statbuf;
@@ -176,37 +179,36 @@ int scan_dir(char *dir)
                            (strcmp(entry->d_name, "..") == 0))
                                 continue;
                         
-                        scan_dir(entry->d_name);
+                        scan_dir(entry->d_name, name);
                 } else {
                         /* usb设备均使用符号链接连接 */
                         if((statbuf.st_mode & S_IFMT) == S_IFLNK) {
-                                scan_usbdevice(entry->d_name);
+                                if(scan_usbdevice(entry->d_name, name) == 0) {
+                                        ret = 0;
+                                        goto out;
+                                }
                         }
                 }
         }
 
+out:
         closedir(p_dir);        /* 关闭文件流 */
         chdir("..");            /* 返回上一层目录 */
 
-        return 0;
+        return ret;
 }
 
-int main(int argc, char* argv[])
+int find_usbdevname(char *pid, char *vid, char *name)
 {
+        int ret = 0;
         int len = 0;
-        /* param number check */
-        if (argc != 3) {
-                printf("Usage: %s VID(hex) PID(hex)\n\
-                       example : %s 0483 5728\n", argv[0], argv[0]);
-                exit(-1);
-        }
         /* param length check */
-        len = strlen(argv[1]);
+        len = strlen(vid);
         if (len != 4) {
                 printf("Param VID length error!\n");
                 exit(-1);
         }
-        len = strlen(argv[2]);
+        len = strlen(pid);
         if(len != 4) {
                 printf("Param PID length error!\n");
                 exit(-1);
@@ -223,17 +225,17 @@ int main(int argc, char* argv[])
                 printf("malloc error %s %d\n", __FUNCTION__, __LINE__);
                 exit(-1);
         }
-        strncpy(find_pid, argv[1], 5);
-        strncpy(find_vid, argv[2], 5);
-        printf("Find file: PID:0x%s VID:%s\n", find_pid, find_vid);
+        strncpy(find_pid, pid, 5);
+        strncpy(find_vid, vid, 5);
+        printf("Find file: PID:0x%s VID:0x%s\n", find_pid, find_vid);
 
-        scan_dir(USB_FOLDER_NAME);
+        ret = scan_dir(USB_FOLDER_NAME, name);
 
         free(find_vid);
         free(find_pid);
         find_vid = NULL;
         find_pid = NULL;
 
-        return 0;
+        return ret;
 }
 
