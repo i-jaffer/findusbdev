@@ -5,6 +5,8 @@
 #include <sys/stat.h>
 #include <dirent.h>
 #include <fcntl.h>
+#include <wait.h>
+#include <sys/mman.h>
 
 #define USB_FOLDER_NAME         "/sys/bus/usb/devices"
 //#define USB_FOLDER_NAME         "/home/wl/workspace"
@@ -25,7 +27,7 @@ void sys_error(char *str)
  * @param pathname:设备路径
  * @return -1:error 0:no find 1:success
  */
-int find_usbname(char *pathname)
+int find_usbname(char *pathname, void *arg)
 {
         int ret = 0;
         DIR *fd = 0;
@@ -41,11 +43,12 @@ int find_usbname(char *pathname)
         while((entry = readdir(fd)) != NULL) {
                 if(lstat(entry->d_name, &statbuf) == -1)
                         sys_error("lstat error in find_usbname");
-                printf("%s\n",entry->d_name);
+                //printf("%s\n",entry->d_name);
 
                 /* 判断是否有 ttyUSB* 的目录或文件，若有则完成查找，可返回 */
                 if(strncmp(entry->d_name, "ttyUSB", 6) == 0) {
                         printf("Name:%s\n", entry->d_name);
+                        strcpy(arg, entry->d_name);
                         
                         ret = 1;
                         goto out;
@@ -56,7 +59,7 @@ int find_usbname(char *pathname)
                            (strcmp(entry->d_name, "..") == 0))
                                 continue;
 
-                        if(find_usbname(entry->d_name) == 1) {
+                        if(find_usbname(entry->d_name, arg) == 1) {
                                 ret = 1;
                                 goto out;
                         }
@@ -127,9 +130,29 @@ int scan_usbdevice(char *pathname)
 
         printf("%s\n", path_buf);
         printf("find device!\n");
-        find_usbname(pathname);
-        ret = 0;
 
+        /* 创建匿名映射区 */
+        char *p = NULL;
+        p = mmap(NULL, 10, PROT_WRITE|PROT_READ, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+        if(p == MAP_FAILED)
+                sys_error("mmap error");
+
+        /* 创建子进程用于查找设备名，因为子进程工作路径不会影响父进程工作路径 */
+        pid_t pid;
+        pid = fork();
+        if(pid == -1)
+                sys_error("fork error");
+        else if(pid == 0) {
+                ret = find_usbname(pathname, (void*)p);
+                if(ret != 1)
+                        strcpy(p, "NULL");
+                exit(1);
+        }else {
+                wait(NULL);
+                printf("finish:%s\n", p);
+        }
+
+        ret = 0;
 out:
         return ret;
 }

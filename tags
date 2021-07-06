@@ -1,0 +1,16 @@
+!_TAG_FILE_FORMAT	2	/extended format; --format=1 will not append ;" to lines/
+!_TAG_FILE_SORTED	1	/0=unsorted, 1=sorted, 2=foldcase/
+!_TAG_PROGRAM_AUTHOR	Darren Hiebert	/dhiebert@users.sourceforge.net/
+!_TAG_PROGRAM_NAME	Exuberant Ctags	//
+!_TAG_PROGRAM_URL	http://ctags.sourceforge.net	/official site/
+!_TAG_PROGRAM_VERSION	5.9~svn20110310	//
+USB_FOLDER_NAME	find_usbdevice.c	9;"	d	file:
+USB_PID_FILE_NAME	find_usbdevice.c	11;"	d	file:
+USB_VID_FILE_NAME	find_usbdevice.c	12;"	d	file:
+find_pid	find_usbdevice.c	/^char* find_pid;$/;"	v
+find_usbname	find_usbdevice.c	/^int find_usbname(char *pathname)$/;"	f
+find_vid	find_usbdevice.c	/^char* find_vid;$/;"	v
+main	find_usbdevice.c	/^int main(int argc, char* argv[])$/;"	f
+scan_dir	find_usbdevice.c	/^int scan_dir(char *dir)$/;"	f
+scan_usbdevice	find_usbdevice.c	/^int scan_usbdevice(char *pathname)$/;"	f
+sys_error	find_usbdevice.c	/^void sys_error(char *str)$/;"	f
