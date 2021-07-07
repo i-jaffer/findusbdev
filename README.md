@@ -10,17 +10,18 @@
 ## Directory Structure
 + `srcfile` 存放源文件
 + `example` 存放demo介绍如何使用此程序
-        + `lib` 存放对应的动态库文件
-        + `include` 存放对应的头文件
++ `./example/lib` 存放对应的动态库文件
++ `./example/include` 存放对应的头文件
 
 ## Precautions
 + 此程序目前仅限于查找设备名为`ttyUSB`的设备
 + 若需要查找其他类型设备名，需修改`find_usbdevice.c` 文件内的`find_usbname()` 函数
 + 执行`example` demo的时候需要指定库路径，可使用下述方法临时设置库路径
-        ```c
+```c
         cd ./example/src/
         export LD_LIBRARY_PATH=../lib
-        ```
+```
+
 之后可输入 `ldd example` 查看库依赖关系，确认依赖关系没有问题
 输入`./example` 执行测试程序
 
