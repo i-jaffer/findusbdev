@@ -9,12 +9,11 @@
 #include <sys/mman.h>
 
 #define USB_FOLDER_NAME         "/sys/bus/usb/devices"
-//#define USB_FOLDER_NAME         "/home/wl/workspace"
 #define USB_PID_FILE_NAME       "idProduct"
 #define USB_VID_FILE_NAME       "idVendor"
 
-char* find_vid;
-char* find_pid;
+char* find_vid = NULL;
+char* find_pid = NULL;
 
 void sys_error(char *str)
 {
@@ -24,8 +23,8 @@ void sys_error(char *str)
 
 /*
  * @brief 在对应的设备目录内查询对应设备的名字
- * @param pathname:设备路径
- * @return -1:error 0:no find 1:success
+ * @param pathname:设备路径 arg:此处为存储设备名指针
+ * @return -1:error 0:no find device 1:success
  */
 int find_usbname(char *pathname, void *arg)
 {
@@ -49,7 +48,6 @@ int find_usbname(char *pathname, void *arg)
                 if(strncmp(entry->d_name, "ttyUSB", 6) == 0) {
                         printf("Name:%s\n", entry->d_name);
                         strcpy(arg, entry->d_name);
-                        
                         ret = 1;
                         goto out;
                 }
@@ -63,6 +61,8 @@ int find_usbname(char *pathname, void *arg)
                                 ret = 1;
                                 goto out;
                         }
+                        else
+                                ret = 0;
                 }
 #if 0
                 else if((statbuf.st_mode & S_IFMT) == S_IFLNK) { /* 若是链接则遍历链接内容 */
@@ -82,10 +82,11 @@ out:
 }
 
 /**
- * @brief 扫描路径内是否有 @ref USB_PID_FILE_NAME 和 @ref USB_VID_FILE_NAME
- * 文件，若有则比较是否是等于需要查找的vid和pid
- * @param pathname:路径
- * @return 0:success -1:failed
+ * @brief 扫描路径内是否有 @ref USB_PID_FILE_NAME 和 @ref USB_VID_FILE_NAME文件，若
+ *      有则比较是否是等于需要查找的vid和pid，如果相等则存在对应的设备，创建子进程在
+ *      对应目录下查找设备名
+ * @param pathname:路径 name:设备名(传出参数)
+ * @return 0:success -1:fail
  */
 int scan_usbdevice(char *pathname, char *name)
 {
@@ -143,9 +144,7 @@ int scan_usbdevice(char *pathname, char *name)
         if(pid == -1)
                 sys_error("fork error");
         else if(pid == 0) {
-                ret = find_usbname(pathname, (void*)p);
-                if(ret != 1)
-                        strcpy(p, "NULL");
+                find_usbname(pathname, (void*)p);
                 exit(1);
         }else {
                 wait(NULL);
@@ -159,6 +158,13 @@ out:
         return ret;
 }
 
+/**
+ * @brief 扫描目录文件夹，遍历对应的目录，遇到符号连接则调用 @func scan_usbdevice
+ * 扫描链接目录内文件
+ * @note 一般/sys/bus/usb目录下的均为符号链接
+ * @param dir:扫描目录 name:传出参数，设备名
+ * @retval 0:success -1:fail
+ */
 int scan_dir(char *dir, char *name)
 {
         int ret = -1;
@@ -198,6 +204,11 @@ out:
         return ret;
 }
 
+/**
+ * @brief 通过vid、pid查找设备名
+ * @param pid:设备PID vid:设备VID name:用于接收设备名的数组首地址
+ * @retval 0:success 1:fail
+ */
 int find_usbdevname(char *pid, char *vid, char *name)
 {
         int ret = 0;
