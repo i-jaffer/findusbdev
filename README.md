@@ -14,22 +14,22 @@
 + `./example/include` 存放对应的头文件
 
 ## Usage
-+ **获取usb设备的设备名**
-+ `int get_usbdevname(char *pid, char *vid, device_type devtype, char *name)` 
+**1. 获取usb设备的设备名**
+`int get_usbdevname(char *pid, char *vid, device_type devtype, char *name)` 
 + @param pid:设备PID 
 + @param vid:设备VID
 + @param devtype:设备类型 @ref device_type
 + @param name:用于接收设备名的数组首地址   
 + retval: 0:success -1:failed
 
-`device_type`能设置为`ttyUSB`和`vedio`
+&emsp;`device_type`能设置为`ttyUSB`和`vedio`
         
-+ **检查对应vid、pid的设备是否存在**
-+ `int check_usbdev(char *pid, char *vid);` 
+**2. 检查对应vid、pid的设备是否存在**
+`int check_usbdev(char *pid, char *vid);` 
 + @param pid:设备PID vid:设备VID
 + @retval 0:success 1:fail
 
-+ 执行`example` demo的时候需要指定库路径，可使用下述方法临时设置库路径
+执行`example` demo的时候需要指定库路径，可使用下述方法临时设置库路径
 ```c
         cd ./example/src/
         export LD_LIBRARY_PATH=../lib
