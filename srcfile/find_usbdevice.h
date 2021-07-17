@@ -1,6 +1,12 @@
 #ifndef __FIND_USBDEVICE_H_
 #define __FIND_USBDEVICE_H_
 
-int find_usbdevname(char *pid, char *vid, char *name);  
+typedef enum device_type_enum{
+        ttyUSB = 0,
+        video = 1
+}device_type;
+
+int get_usbdevname(char *pid, char *vid, device_type devtype, char *name);
+int check_usbdev(char *pid, char *vid);
 
 #endif

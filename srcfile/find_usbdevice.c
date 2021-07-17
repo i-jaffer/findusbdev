@@ -7,6 +7,7 @@
 #include <fcntl.h>
 #include <wait.h>
 #include <sys/mman.h>
+#include "find_usbdevice.h"
 
 #define USB_FOLDER_NAME         "/sys/bus/usb/devices"
 #define USB_PID_FILE_NAME       "idProduct"
@@ -24,7 +25,7 @@
 
 char* find_vid = NULL;
 char* find_pid = NULL;
-char* dev_name = NULL;
+int usbdevtype = 0;
 
 void sys_error(char *str)
 {
@@ -38,7 +39,7 @@ void sys_error(char *str)
  * @param *devname:存储读取到的设备名信息，传出参数
  * @retval >0:dev name length, 0:no find dev
  */
-int find_devname(char *file_name, char *devname)
+int read_devname(char *file_name, char *devname)
 {
         int ret = 0;
         int fd_uevent;
@@ -76,8 +77,19 @@ int find_devname(char *file_name, char *devname)
                         continue;
                 }
 
+                int str_ret = 0;
                 devname_p = temp_p + find_data_len; 
-                if(strncmp(devname_p, "ttyUSB", 6) == 0) {
+                switch(usbdevtype) {
+                case ttyUSB:
+                        str_ret = strncmp(devname_p, "ttyUSB", 6);
+                        break;
+                case video:
+                        str_ret = strncmp(devname_p, "video", 5);
+                        break;
+                default:
+                        break;
+                }
+                if(str_ret == 0) {
                         devname_len = (strchr(devname_p,'\n') - devname_p);
                         strncpy(devname, devname_p, devname_len);
                         //printf("devname :%s\n",devname);
@@ -120,7 +132,7 @@ int find_ueventfile(char *pathname, void *arg)
                                 int name_len = 0;
                                 char name_buf[100];
                                 memset(name_buf, 0, 100);
-                                name_len = find_devname(entry->d_name, name_buf);
+                                name_len = read_devname(entry->d_name, name_buf);
                                 if(name_len > 0) {
                                         strncpy((char *)arg, name_buf, name_len);
                                         ret = 1;
@@ -158,14 +170,45 @@ out:
         return ret;
 }
 
-/**
- * @brief 扫描路径内是否有 @ref USB_PID_FILE_NAME 和 @ref USB_VID_FILE_NAME文件，若
- *      有则比较是否是等于需要查找的vid和pid，如果相等则存在对应的设备，创建子进程在
- *      对应目录下查找设备名
- * @param pathname:路径 name:设备名(传出参数)
+/*
+ * @brief 创建子进程在对应目录下查找uevent文件，从文件中读取设备名
+ * @param pathname:/sys/bus/usb/device/xxxx路径 name:设备名(传出参数)
  * @return 0:success -1:fail
  */
-int scan_usbdevice(char *pathname, char *name)
+int find_devname(char *pathname, char* name) 
+{
+        int ret = 0;
+        /* 创建匿名映射区 */
+        char *p = NULL;
+        p = mmap(NULL, 100, PROT_WRITE|PROT_READ, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+        if(p == MAP_FAILED)
+                sys_error("mmap error");
+
+        /* 创建子进程用于查找设备名，因为子进程工作路径不会影响父进程工作路径 */
+        pid_t pid;
+        pid = fork();
+        if(pid == -1)
+                sys_error("fork error");
+        else if(pid == 0) {
+                find_ueventfile(pathname, (void*)p);
+                exit(1);
+        }else {
+                wait(NULL);
+                printf("finish:%s\n", p);
+                strcpy(name, p);
+        }
+        munmap(p, 100);
+
+        return ret;
+}
+
+/**
+ * @brief 扫描路径内是否有 @ref USB_PID_FILE_NAME 和 @ref USB_VID_FILE_NAME文件，若
+ *      有则比较是否是等于需要查找的vid和pid
+ * @param pathname:/sys/bus/usb/device/xxxx路径
+ * @return 0:success -1:fail
+ */
+int scan_usbdevice(char *pathname)
 {
         int fd = 0;
         int ret = 0;
@@ -208,28 +251,6 @@ int scan_usbdevice(char *pathname, char *name)
 
         printf("%s find device!\n", pathname);
 
-        /* 创建匿名映射区 */
-        char *p = NULL;
-        p = mmap(NULL, 100, PROT_WRITE|PROT_READ, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
-        if(p == MAP_FAILED)
-                sys_error("mmap error");
-
-        /* 创建子进程用于查找设备名，因为子进程工作路径不会影响父进程工作路径 */
-        pid_t pid;
-        pid = fork();
-        if(pid == -1)
-                sys_error("fork error");
-        else if(pid == 0) {
-                find_ueventfile(pathname, (void*)p);
-                exit(1);
-        }else {
-                wait(NULL);
-                printf("finish:%s\n", p);
-                strcpy(name, p);
-        }
-        munmap(p, 100);
-
-        ret = 0;
 out:
         return ret;
 }
@@ -239,6 +260,7 @@ out:
  * 扫描链接目录内文件
  * @note 一般/sys/bus/usb目录下的均为符号链接
  * @param dir:扫描目录 name:传出参数，设备名
+ * @note 当 @param *name为NULL时,仅查询对应VID、PID设备是否存在
  * @retval 0:success -1:fail
  */
 int scan_dir(char *dir, char *name)
@@ -264,7 +286,9 @@ int scan_dir(char *dir, char *name)
                         scan_dir(entry->d_name, name);
                 } else if((statbuf.st_mode & S_IFMT) == S_IFLNK) {
                         /* usb设备均使用符号链接连接 */
-                        if(scan_usbdevice(entry->d_name, name) == 0) {
+                        if(scan_usbdevice(entry->d_name) == 0) {
+                                if(name != NULL)
+                                        find_devname(entry->d_name, name);
                                 ret = 0;
                                 break;
                         }
@@ -278,42 +302,97 @@ int scan_dir(char *dir, char *name)
 }
 
 /**
- * @brief 通过vid、pid查找设备名
- * @param pid:设备PID vid:设备VID name:用于接收设备名的数组首地址
- * @retval 0:success 1:fail
+ * @brief 获取对应vid、pid设备的设备名
+ * @param pid:设备PID 
+ * @param vid:设备VID
+ * @param devtype:设备类型 @ref device_type
+ * @param name:用于接收设备名的数组首地址
+ * @retval 0:success -1:fail
  */
-int find_usbdevname(char *pid, char *vid, char *name)
+int get_usbdevname(char *pid, char *vid, device_type devtype, char *name)
 {
         int ret = 0;
         int len = 0;
         /* param length check */
-        len = strlen(vid);
-        if (len != 4) {
-                printf("Param VID length error!\n");
-                exit(-1);
-        }
         len = strlen(pid);
         if(len != 4) {
                 printf("Param PID length error!\n");
                 exit(-1);
         }
-
-        find_vid = (char*)malloc(10);
-        memset(find_vid, 0, 10);
-        if(find_vid == NULL) {
-                printf("malloc error %s %d\n", __FUNCTION__, __LINE__);
+        len = strlen(vid);
+        if (len != 4) {
+                printf("Param VID length error!\n");
                 exit(-1);
         }
+
         find_pid = (char*)malloc(10);
         if(find_pid == NULL) {
                 printf("malloc error %s %d\n", __FUNCTION__, __LINE__);
                 exit(-1);
         }
+        memset(find_pid, 0, 10);
+
+        find_vid = (char*)malloc(10);
+        if(find_vid == NULL) {
+                printf("malloc error %s %d\n", __FUNCTION__, __LINE__);
+                exit(-1);
+        }
+        memset(find_vid, 0, 10);
+        
         strncpy(find_pid, pid, 5);
         strncpy(find_vid, vid, 5);
-        printf("Find file: PID:0x%s VID:0x%s\n", find_pid, find_vid);
+        usbdevtype = devtype;
+        printf("Get usb device name: PID:0x%s VID:0x%s dev type:%d\n",
+               find_pid, find_vid, usbdevtype);
 
         ret = scan_dir(USB_FOLDER_NAME, name);
+
+        free(find_vid);
+        free(find_pid);
+        find_vid = NULL;
+        find_pid = NULL;
+
+        return ret;
+}
+
+/**
+ * @brief 检查对应vid、pid的设备是否存在
+ * @param pid:设备PID vid:设备VID
+ * @retval 0:success 1:fail
+ */
+int check_usbdev(char *pid, char *vid)
+{
+        int ret = 0;
+        int len = 0;
+        /* param length check */
+        len = strlen(pid);
+        if(len != 4) {
+                printf("Param PID length error!\n");
+                exit(-1);
+        }
+        len = strlen(vid);
+        if (len != 4) {
+                printf("Param VID length error!\n");
+                exit(-1);
+        }
+
+        find_pid = (char*)malloc(10);
+        if(find_pid == NULL) {
+                printf("malloc error %s %d\n", __FUNCTION__, __LINE__);
+                exit(-1);
+        }
+        memset(find_pid, 0, 10);
+        find_vid = (char*)malloc(10);
+        if(find_vid == NULL) {
+                printf("malloc error %s %d\n", __FUNCTION__, __LINE__);
+                exit(-1);
+        }
+        memset(find_vid, 0, 10);
+        strncpy(find_pid, pid, 5);
+        strncpy(find_vid, vid, 5);
+        printf("Check usb device: PID:0x%s VID:0x%s\n", find_pid, find_vid);
+
+        ret = scan_dir(USB_FOLDER_NAME, NULL);
 
         free(find_vid);
         free(find_pid);

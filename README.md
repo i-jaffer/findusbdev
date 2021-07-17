@@ -14,8 +14,21 @@
 + `./example/include` 存放对应的头文件
 
 ## Usage
-+ 此程序目前仅限于查找设备名为`ttyUSB`的设备
-+ 若需要查找其他类型设备名，需修改`find_usbdevice.c` 文件内的`find_usbname()` 函数
++ 获取usb设备的设备名
+`int get_usbdevname(char *pid, char *vid, device_type devtype, char *name)` 
+        + @param pid:设备PID 
+        + @param vid:设备VID
+        + @param devtype:设备类型 @ref device_type
+        + @param name:用于接收设备名的数组首地址   
+        + retval: 0:success -1:failed
+
+        `device_type`能设置为`ttyUSB`和`vedio`
+        
++ 检查对应vid、pid的设备是否存在
+`int check_usbdev(char *pid, char *vid);` 
+        + @param pid:设备PID vid:设备VID
+        + @retval 0:success 1:fail
+
 + 执行`example` demo的时候需要指定库路径，可使用下述方法临时设置库路径
 ```c
         cd ./example/src/
@@ -30,3 +43,4 @@ gcc.
 
 ## License
 Follow the MIT license.
+Editor @wanglei(tim).
