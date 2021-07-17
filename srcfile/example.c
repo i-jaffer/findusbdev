@@ -7,7 +7,10 @@ int main()
         int ret = 0;
         ret = find_usbdevname("ea60","10c4", name);
 
-        printf("usb dev:%s, ret =%d\n", name, ret);
+        if(ret == 0)
+                printf("success, usb dev:%s\n", name);
+        else
+                printf("fail, no find dev!\n");
 
         return 0;
 }

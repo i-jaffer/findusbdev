@@ -24,6 +24,7 @@
 
 char* find_vid = NULL;
 char* find_pid = NULL;
+char* dev_name = NULL;
 
 void sys_error(char *str)
 {
@@ -31,6 +32,12 @@ void sys_error(char *str)
         exit(-1);
 }
 
+/*
+ * @brief 在文件file_name内读取设备名，使用devname返回
+ * @param *file_name:操作的文件名
+ * @param *devname:存储读取到的设备名信息，传出参数
+ * @retval >0:dev name length, 0:no find dev
+ */
 int find_devname(char *file_name, char *devname)
 {
         int ret = 0;
@@ -47,28 +54,19 @@ int find_devname(char *file_name, char *devname)
         fd_uevent = open(file_name, O_RDONLY);
         if(fd_uevent == -1) 
                 sys_error("open uevent file error!\n");
-
         do {
                 /* read file content */
                 read_count = read(fd_uevent, buf, sizeof(buf));
-                /* 如果文件未读取结束，则将文件指针前移搜索字符串长度，防止遗漏 */
+                /* 如果文件读取一次未读取结束，则将文件指针前移搜索字符串长度，防止遗漏 */
                 if(read_count == sizeof(buf))
                         if(lseek(fd_uevent, find_data_len*(-1), SEEK_CUR) == -1)
                                 sys_error("lseek error");
 
                 /* 在读取出的buf数组中查找字符串 */
-#if 0
-                for(int i=0; i<(read_count-find_data_len); i++) {
-                        if(strncmp(buf+i, "DEVNAME=", find_data_len) == 0) {
-                                printf("===============\n");
-                                printf("devname : %s",buf+i+find_data_len);
-                                printf("buf+i:%d '0':%d\n", buf+i,strchr(buf+i, '\0'));
-                        }
-                }
-#else
                 temp_p = strstr(buf, "DEVNAME=");
                 if(temp_p == NULL)
-                        break;
+                        continue;
+
                 /* 判断有效数据长度是否足够,防止设备名被截断 */
                 if(strchr(temp_p, '\n') == NULL) {
                         if(lseek(fd_uevent,
@@ -78,22 +76,18 @@ int find_devname(char *file_name, char *devname)
                         continue;
                 }
 
-                devname_p = temp_p + find_data_len;
-
-                printf("temp:%s\n",temp_p);
-                printf("name:%s\n",devname_p);
-                devname_len = (strchr(devname_p,'\n') - devname_p - 1);
-                printf("len%d\n",devname_len);
-                strncpy(devname, devname_p, devname_len);
-                ret = devname_len;
-#endif
+                devname_p = temp_p + find_data_len; 
+                if(strncmp(devname_p, "ttyUSB", 6) == 0) {
+                        devname_len = (strchr(devname_p,'\n') - devname_p);
+                        strncpy(devname, devname_p, devname_len);
+                        //printf("devname :%s\n",devname);
+                        //printf("devanme_len:%d\n",devname_len);
+                        ret = devname_len;
+                        break;
+                }
         }while(read_count != 0);
 
-        //printf("*********************\n");
-        //printf("buf:%s\n", buf);
-
         close(fd_uevent);
-
         return ret;
 }
 
@@ -119,28 +113,16 @@ int find_ueventfile(char *pathname, void *arg)
         while((entry = readdir(fd)) != NULL) {
                 if(lstat(entry->d_name, &statbuf) == -1)
                         sys_error("lstat error in find_usbname");
-                //printf("%s\n",entry->d_name);
 
-                /* 判断是否有 ttyUSB* 的目录或文件，若有则完成查找，可返回 */
-#if 0
-                if(strncmp(entry->d_name, "ttyUSB", 6) == 0) {
-                        printf("Name:%s\n", entry->d_name);
-                        strcpy(arg, entry->d_name);
-                        ret = 1;
-                        goto out;
-                }
-#endif
+                /* 遍历文件夹查找uevent文件 */
                 if((statbuf.st_mode & S_IFMT) == S_IFREG) {
                         if(strcmp(entry->d_name, "uevent") == 0) {
-                                char name_buf[200];
-                                memset(name_buf, 0, 200);
                                 int name_len = 0;
+                                char name_buf[100];
+                                memset(name_buf, 0, 100);
                                 name_len = find_devname(entry->d_name, name_buf);
                                 if(name_len > 0) {
-                                        log("================len: %d, %d\n", strlen(name_buf), name_len);
-                                        strncpy((char *)arg, name_buf, 4);
-                                        //memcpy(arg, "asdf", 4);
-                                        log("===============\n");
+                                        strncpy((char *)arg, name_buf, name_len);
                                         ret = 1;
                                         goto out;
                                 }
@@ -188,7 +170,7 @@ int scan_usbdevice(char *pathname, char *name)
         int fd = 0;
         int ret = 0;
         char path_buf[100];
-        char file_buf[BUFSIZ];
+        char file_buf[10];
 
         /* find idProduct(PID) */
         sprintf(path_buf, "%s/%s", pathname, USB_PID_FILE_NAME);
@@ -197,7 +179,7 @@ int scan_usbdevice(char *pathname, char *name)
                 ret = -1;
                 goto out;
         }
-        ret = read(fd, file_buf, BUFSIZ);
+        ret = read(fd, file_buf, sizeof(file_buf));
         if(ret == -1)
                 sys_error("read error");
         close(fd);
@@ -214,7 +196,7 @@ int scan_usbdevice(char *pathname, char *name)
                 ret = -1;
                 goto out;
         }
-        ret = read(fd, file_buf, BUFSIZ);
+        ret = read(fd, file_buf, sizeof(file_buf));
         if(ret == -1)
                 sys_error("read error");
         close(fd);
@@ -224,12 +206,11 @@ int scan_usbdevice(char *pathname, char *name)
                 goto out;
         }
 
-        printf("%s\n", path_buf);
-        printf("find device!\n");
+        printf("%s find device!\n", pathname);
 
         /* 创建匿名映射区 */
         char *p = NULL;
-        p = mmap(NULL, 255, PROT_WRITE|PROT_READ, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+        p = mmap(NULL, 100, PROT_WRITE|PROT_READ, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
         if(p == MAP_FAILED)
                 sys_error("mmap error");
 
@@ -246,7 +227,7 @@ int scan_usbdevice(char *pathname, char *name)
                 printf("finish:%s\n", p);
                 strcpy(name, p);
         }
-        munmap(p, 10);
+        munmap(p, 100);
 
         ret = 0;
 out:
@@ -281,18 +262,15 @@ int scan_dir(char *dir, char *name)
                                 continue;
                         
                         scan_dir(entry->d_name, name);
-                } else {
+                } else if((statbuf.st_mode & S_IFMT) == S_IFLNK) {
                         /* usb设备均使用符号链接连接 */
-                        if((statbuf.st_mode & S_IFMT) == S_IFLNK) {
-                                if(scan_usbdevice(entry->d_name, name) == 0) {
-                                        ret = 0;
-                                        goto out;
-                                }
+                        if(scan_usbdevice(entry->d_name, name) == 0) {
+                                ret = 0;
+                                break;
                         }
                 }
         }
 
-out:
         closedir(p_dir);        /* 关闭文件流 */
         chdir("..");            /* 返回上一层目录 */
 
