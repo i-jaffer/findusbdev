@@ -45,7 +45,7 @@ int read_devname(char *file_name, char *devname)
         int fd_uevent;
         int read_count = 0;
         int find_data_len = 0;
-        char buf[100];
+        char buf[101] = {0};
         char devname_len = 0;
         char *temp_p = 0;
         char *devname_p = 0;
@@ -57,9 +57,9 @@ int read_devname(char *file_name, char *devname)
                 sys_error("open uevent file error!\n");
         do {
                 /* read file content */
-                read_count = read(fd_uevent, buf, sizeof(buf));
+                read_count = read(fd_uevent, buf, (sizeof(buf)-1));
                 /* 如果文件读取一次未读取结束，则将文件指针前移搜索字符串长度，防止遗漏 */
-                if(read_count == sizeof(buf))
+                if(read_count == (sizeof(buf)-1))
                         if(lseek(fd_uevent, find_data_len*(-1), SEEK_CUR) == -1)
                                 sys_error("lseek error");
 
@@ -120,7 +120,7 @@ int find_ueventfile(char *pathname, void *arg)
         if(fd == NULL)
                 sys_error("opendir error in find_usbname");
 
-        struct dirent *entry;
+        struct dirent *entry = NULL;
         struct stat statbuf;
         while((entry = readdir(fd)) != NULL) {
                 if(lstat(entry->d_name, &statbuf) == -1)
@@ -212,8 +212,8 @@ int scan_usbdevice(char *pathname)
 {
         int fd = 0;
         int ret = 0;
-        char path_buf[100];
-        char file_buf[10];
+        char path_buf[100] = {0};
+        char file_buf[10] = {0};
 
         /* find idProduct(PID) */
         sprintf(path_buf, "%s/%s", pathname, USB_PID_FILE_NAME);
@@ -266,8 +266,8 @@ out:
 int scan_dir(char *dir, char *name)
 {
         int ret = -1;
-        DIR *p_dir;
-        struct dirent *entry;
+        DIR *p_dir = NULL;
+        struct dirent *entry = NULL;
         struct stat statbuf;
 
         p_dir = opendir(dir);
