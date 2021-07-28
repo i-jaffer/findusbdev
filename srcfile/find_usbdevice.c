@@ -86,6 +86,8 @@ int read_devname(char *file_name, char *devname)
                 case video:
                         str_ret = strncmp(devname_p, "video", 5);
                         break;
+                case pcm:
+                        str_ret = strncmp(devname_p, "snd/pcm", 7);
                 default:
                         break;
                 }

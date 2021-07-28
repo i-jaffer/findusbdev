@@ -22,7 +22,7 @@
 + @param name:用于接收设备名的数组首地址   
 + retval: 0:success -1:failed
 
-&emsp;`device_type`能设置为`ttyUSB`和`vedio`
+&emsp;`device_type`能设置为`ttyUSB`和`vedio`、`pcm`
         
 **2. 检查对应vid、pid的设备是否存在**
 `int check_usbdev(char *pid, char *vid);` 

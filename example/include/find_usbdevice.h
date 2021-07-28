@@ -3,7 +3,8 @@
 
 typedef enum device_type_enum{
         ttyUSB = 0,
-        video = 1
+        video = 1,
+        pcm
 }device_type;
 
 int get_usbdevname(char *pid, char *vid, device_type devtype, char *name);
