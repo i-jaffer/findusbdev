@@ -27,17 +27,11 @@ char* find_vid = NULL;
 char* find_pid = NULL;
 int usbdevtype = 0;
 
-void sys_error(char *str)
-{
-        perror(str);
-        exit(-1);
-}
-
 /*
  * @brief 在文件file_name内读取设备名，使用devname返回
  * @param *file_name:操作的文件名
  * @param *devname:存储读取到的设备名信息，传出参数
- * @retval >0:dev name length, 0:no find dev
+ * @retval >0:dev name length, 0:no find dev -1:error
  */
 int read_devname(char *file_name, char *devname)
 {
@@ -53,27 +47,39 @@ int read_devname(char *file_name, char *devname)
         find_data_len = strlen("DEVNAME=");
 
         fd_uevent = open(file_name, O_RDONLY);
-        if(fd_uevent == -1) 
-                sys_error("open uevent file error!\n");
+        if(fd_uevent == -1) {
+                perror("open uevent file error!\n");
+                ret = -1;
+                goto error;
+        }
         do {
                 /* read file content */
                 read_count = read(fd_uevent, buf, (sizeof(buf)-1));
                 /* 如果文件读取一次未读取结束，则将文件指针前移搜索字符串长度，防止遗漏 */
                 if(read_count == (sizeof(buf)-1))
-                        if(lseek(fd_uevent, find_data_len*(-1), SEEK_CUR) == -1)
-                                sys_error("lseek error");
+                        if(lseek(fd_uevent, find_data_len*(-1), SEEK_CUR) == -1) {
+                                perror("lseek error");
+                                ret = -1;
+                                goto out;
+                        }
 
                 /* 在读取出的buf数组中查找字符串 */
                 temp_p = strstr(buf, "DEVNAME=");
-                if(temp_p == NULL)
+                if(temp_p == NULL) {
+                        read_count = 0;
                         continue;
+                }
 
                 /* 判断有效数据长度是否足够,防止设备名被截断 */
                 if(strchr(temp_p, '\n') == NULL) {
                         if(lseek(fd_uevent,
                                  (-1)*(sizeof(buf) - (temp_p - buf)),
-                                 SEEK_CUR) == -1)
-                                sys_error("vaild data too short,lseek error");
+                                 SEEK_CUR) == -1) {
+                                perror("vaild data too short,lseek error");
+                                ret = -1;
+                                goto out;
+                        }
+                        read_count = 0;
                         continue;
                 }
 
@@ -86,8 +92,12 @@ int read_devname(char *file_name, char *devname)
                 case video:
                         str_ret = strncmp(devname_p, "video", 5);
                         break;
+                case ttyACM:
+                        str_ret = strncmp(devname_p, "ttyACM", 6);
+                        break;
                 case pcm:
                         str_ret = strncmp(devname_p, "snd/pcm", 7);
+                        break;
                 default:
                         break;
                 }
@@ -101,7 +111,9 @@ int read_devname(char *file_name, char *devname)
                 }
         }while(read_count != 0);
 
+out:
         close(fd_uevent);
+error:
         return ret;
 }
 
@@ -115,18 +127,27 @@ int find_ueventfile(char *pathname, void *arg)
 {
         int ret = 0;
         DIR *fd = 0;
-        if(chdir(pathname) == -1)
-                sys_error("chdir error in find_usbname");
+        if(chdir(pathname) == -1) {
+                perror("chdir error in find_usbname");
+                ret = -1;
+                goto error;
+        }
 
         fd = opendir("./");
-        if(fd == NULL)
-                sys_error("opendir error in find_usbname");
+        if(fd == NULL) {
+                perror("opendir error in find_usbname");
+                ret = -1;
+                goto out;
+        }
 
         struct dirent *entry = NULL;
         struct stat statbuf;
         while((entry = readdir(fd)) != NULL) {
-                if(lstat(entry->d_name, &statbuf) == -1)
-                        sys_error("lstat error in find_usbname");
+                if(lstat(entry->d_name, &statbuf) == -1) {
+                        perror("lstat error in find_usbname");
+                        ret = -1;
+                        goto out;
+                }
 
                 /* 遍历文件夹查找uevent文件 */
                 if((statbuf.st_mode & S_IFMT) == S_IFREG) {
@@ -148,7 +169,7 @@ int find_ueventfile(char *pathname, void *arg)
                            (strcmp(entry->d_name, "..") == 0))
                                 continue;
 
-                        if(find_ueventfile(entry->d_name, arg) == 1) {
+                        if(find_ueventfile(entry->d_name, arg) == 1) {  /* 遍历 */
                                 ret = 1;
                                 goto out;
                         }
@@ -168,7 +189,7 @@ int find_ueventfile(char *pathname, void *arg)
 out:
         closedir(fd);
         chdir("..");
-
+error:
         return ret;
 }
 
@@ -183,14 +204,20 @@ int find_devname(char *pathname, char* name)
         /* 创建匿名映射区 */
         char *p = NULL;
         p = mmap(NULL, 100, PROT_WRITE|PROT_READ, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
-        if(p == MAP_FAILED)
-                sys_error("mmap error");
+        if(p == MAP_FAILED) {
+                perror("mmap error");
+                ret = -1;
+                goto error;
+        }
 
         /* 创建子进程用于查找设备名，因为子进程工作路径不会影响父进程工作路径 */
         pid_t pid;
         pid = fork();
-        if(pid == -1)
-                sys_error("fork error");
+        if(pid == -1) {
+                perror("fork error");
+                ret = -1;
+                goto error;
+        }
         else if(pid == 0) {
                 find_ueventfile(pathname, (void*)p);
                 exit(1);
@@ -201,6 +228,7 @@ int find_devname(char *pathname, char* name)
         }
         munmap(p, 100);
 
+error:
         return ret;
 }
 
@@ -225,8 +253,10 @@ int scan_usbdevice(char *pathname)
                 goto out;
         }
         ret = read(fd, file_buf, sizeof(file_buf));
-        if(ret == -1)
-                sys_error("read error");
+        if(ret == -1) {
+                perror("read error");
+                goto out;
+        }
         close(fd);
         ret = strncmp(file_buf, find_pid, 4);
         if(ret != 0) {
@@ -242,8 +272,10 @@ int scan_usbdevice(char *pathname)
                 goto out;
         }
         ret = read(fd, file_buf, sizeof(file_buf));
-        if(ret == -1)
-                sys_error("read error");
+        if(ret == -1) {
+                perror("read error");
+                goto out;
+        }
         close(fd);
         ret = strncmp(file_buf, find_vid, 4);
         if(ret != 0) {
@@ -273,13 +305,18 @@ int scan_dir(char *dir, char *name)
         struct stat statbuf;
 
         p_dir = opendir(dir);
-        if(p_dir == NULL)
-                sys_error("opendir error");
+        if(p_dir == NULL) {
+                perror("opendir error");
+                ret = -1;
+                goto error;
+        }
 
         chdir(dir);
         while((entry = readdir(p_dir)) != NULL) {
-                if(lstat(entry->d_name, &statbuf) == -1)
-                        sys_error("lstat error in scan_dir");
+                if(lstat(entry->d_name, &statbuf) == -1) {
+                        perror("lstat error in scan_dir");
+                        goto fail_lstat;
+                }
                 if((statbuf.st_mode & S_IFMT) == S_IFDIR) {
                         if((strcmp(entry->d_name, ".") == 0) || 
                            (strcmp(entry->d_name, "..") == 0))
@@ -297,9 +334,10 @@ int scan_dir(char *dir, char *name)
                 }
         }
 
+fail_lstat:
         closedir(p_dir);        /* 关闭文件流 */
         chdir("..");            /* 返回上一层目录 */
-
+error:
         return ret;
 }
 
@@ -319,25 +357,29 @@ int get_usbdevname(char *pid, char *vid, device_type devtype, char *name)
         len = strlen(pid);
         if(len != 4) {
                 printf("Param PID length error!\n");
-                exit(-1);
+                ret = -1;
+                goto out;
         }
         len = strlen(vid);
         if (len != 4) {
                 printf("Param VID length error!\n");
-                exit(-1);
+                ret = -1;
+                goto out;
         }
 
         find_pid = (char*)malloc(10);
         if(find_pid == NULL) {
                 printf("malloc error %s %d\n", __FUNCTION__, __LINE__);
-                exit(-1);
+                ret = -1;
+                goto error;
         }
         memset(find_pid, 0, 10);
 
         find_vid = (char*)malloc(10);
         if(find_vid == NULL) {
                 printf("malloc error %s %d\n", __FUNCTION__, __LINE__);
-                exit(-1);
+                ret = -1;
+                goto error;
         }
         memset(find_vid, 0, 10);
         
@@ -349,18 +391,19 @@ int get_usbdevname(char *pid, char *vid, device_type devtype, char *name)
 
         ret = scan_dir(USB_FOLDER_NAME, name);
 
+error:
         free(find_vid);
         free(find_pid);
         find_vid = NULL;
         find_pid = NULL;
-
+out:
         return ret;
 }
 
 /**
  * @brief 检查对应vid、pid的设备是否存在
  * @param pid:设备PID vid:设备VID
- * @retval 0:success 1:fail
+ * @retval 0:success -1:fail
  */
 int check_usbdev(char *pid, char *vid)
 {
@@ -370,24 +413,28 @@ int check_usbdev(char *pid, char *vid)
         len = strlen(pid);
         if(len != 4) {
                 printf("Param PID length error!\n");
-                exit(-1);
+                ret = -1;
+                goto out;
         }
         len = strlen(vid);
         if (len != 4) {
                 printf("Param VID length error!\n");
-                exit(-1);
+                ret = -1;
+                goto out;
         }
 
         find_pid = (char*)malloc(10);
         if(find_pid == NULL) {
                 printf("malloc error %s %d\n", __FUNCTION__, __LINE__);
-                exit(-1);
+                ret = -1;
+                goto error;
         }
         memset(find_pid, 0, 10);
         find_vid = (char*)malloc(10);
         if(find_vid == NULL) {
                 printf("malloc error %s %d\n", __FUNCTION__, __LINE__);
-                exit(-1);
+                ret = -1;
+                goto error;
         }
         memset(find_vid, 0, 10);
         strncpy(find_pid, pid, 5);
@@ -396,10 +443,12 @@ int check_usbdev(char *pid, char *vid)
 
         ret = scan_dir(USB_FOLDER_NAME, NULL);
 
+error:
         free(find_vid);
         free(find_pid);
         find_vid = NULL;
         find_pid = NULL;
+out:
 
         return ret;
 }

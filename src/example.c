@@ -7,7 +7,7 @@ int main()
         int ret = 0;
 
 #if 1
-        ret = check_usbdev("ea60", "10c4");
+        ret = check_usbdev("03e8", "0483");
 #else 
         ret = check_usbdev("b579", "04f2");
 #endif
@@ -18,7 +18,7 @@ int main()
 
 
 #if 1
-        ret = get_usbdevname("ea60","10c4", ttyUSB, name);
+        ret = get_usbdevname("03e8", "0483", ttyACM, name);
 #else 
         ret = get_usbdevname("b579","04f2", video, name);
 #endif

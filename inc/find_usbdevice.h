@@ -4,6 +4,7 @@
 typedef enum device_type_enum{
         ttyUSB = 0,
         video = 1,
+        ttyACM = 2,
         pcm
 }device_type;
 
