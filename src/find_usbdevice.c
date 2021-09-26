@@ -319,25 +319,29 @@ int get_usbdevname(char *pid, char *vid, device_type devtype, char *name)
         len = strlen(pid);
         if(len != 4) {
                 printf("Param PID length error!\n");
-                exit(-1);
+                ret = -1;
+                goto out;
         }
         len = strlen(vid);
         if (len != 4) {
                 printf("Param VID length error!\n");
-                exit(-1);
+                ret = -1;
+                goto out;
         }
 
         find_pid = (char*)malloc(10);
         if(find_pid == NULL) {
                 printf("malloc error %s %d\n", __FUNCTION__, __LINE__);
-                exit(-1);
+                ret = -1;
+                goto error;
         }
         memset(find_pid, 0, 10);
 
         find_vid = (char*)malloc(10);
         if(find_vid == NULL) {
                 printf("malloc error %s %d\n", __FUNCTION__, __LINE__);
-                exit(-1);
+                ret = -1;
+                goto error;
         }
         memset(find_vid, 0, 10);
         
@@ -349,18 +353,19 @@ int get_usbdevname(char *pid, char *vid, device_type devtype, char *name)
 
         ret = scan_dir(USB_FOLDER_NAME, name);
 
+error:
         free(find_vid);
         free(find_pid);
         find_vid = NULL;
         find_pid = NULL;
-
+out:
         return ret;
 }
 
 /**
  * @brief 检查对应vid、pid的设备是否存在
  * @param pid:设备PID vid:设备VID
- * @retval 0:success 1:fail
+ * @retval 0:success -1:fail
  */
 int check_usbdev(char *pid, char *vid)
 {
@@ -370,24 +375,28 @@ int check_usbdev(char *pid, char *vid)
         len = strlen(pid);
         if(len != 4) {
                 printf("Param PID length error!\n");
-                exit(-1);
+                ret = -1;
+                goto out;
         }
         len = strlen(vid);
         if (len != 4) {
                 printf("Param VID length error!\n");
-                exit(-1);
+                ret = -1;
+                goto out;
         }
 
         find_pid = (char*)malloc(10);
         if(find_pid == NULL) {
                 printf("malloc error %s %d\n", __FUNCTION__, __LINE__);
-                exit(-1);
+                ret = -1;
+                goto error;
         }
         memset(find_pid, 0, 10);
         find_vid = (char*)malloc(10);
         if(find_vid == NULL) {
                 printf("malloc error %s %d\n", __FUNCTION__, __LINE__);
-                exit(-1);
+                ret = -1;
+                goto error;
         }
         memset(find_vid, 0, 10);
         strncpy(find_pid, pid, 5);
@@ -396,10 +405,12 @@ int check_usbdev(char *pid, char *vid)
 
         ret = scan_dir(USB_FOLDER_NAME, NULL);
 
+error:
         free(find_vid);
         free(find_pid);
         find_vid = NULL;
         find_pid = NULL;
+out:
 
         return ret;
 }
