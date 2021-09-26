@@ -8,12 +8,18 @@
 软链接指向存放对应usb设备的系列信息的目录
 
 ## Directory Structure
-+ `srcfile` 存放源文件
++ `src` 存放.c源文件
++ `inc` 存放.h头文件
++ `lib` 存放生成的库文件
 + `example` 存放demo介绍如何使用此程序
 + `./example/lib` 存放对应的动态库文件
 + `./example/include` 存放对应的头文件
 
 ## Usage
+input `make` to compile project.  
+input `make clean` to clean project file.  
+input `make` and `make lib` to generate library.
+
 **1. 获取usb设备的设备名**
 `int get_usbdevname(char *pid, char *vid, device_type devtype, char *name)` 
 + @param pid:设备PID 
@@ -39,8 +45,8 @@
 输入`./example` 执行测试程序
 
 ## Compile
-gcc.
+gcc, arm-linux-gnueabihf-gcc, aarch64-linux-gnu-gcc.
 
 ## License
-Follow the MIT license.
+Follow the MIT license.  
 Editor @wanglei(tim).
